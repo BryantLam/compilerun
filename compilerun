@@ -1,0 +1,99 @@
+#!/bin/bash
+# v0.1.0
+#
+# Quickly compile a source file and run that program
+# Copyright (c) 2020 Bryant C. Lam
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+set -o errexit -o pipefail -o noclobber -o nounset
+
+__usage() {
+    local script="$(basename $0)"
+    echo "Usage: $script compiler csv_source_extensions source [compiler_options] [-- [program_arguments]]"
+    echo
+    echo "Examples"
+    echo "  $script gcc c hello.c"
+    echo "  $script g++ cpp,cc hello.cpp -std=gnu++17"
+    echo "  $script clang++ cpp,cc hello -- 42"
+    echo
+}
+
+min_args=3
+if (( $# < $min_args )); then
+    __usage >&2
+    exit 1
+fi
+
+declare compiler="$1"
+declare -a extensions
+IFS=',' read -ra extensions <<< "$2"
+declare source="$3"
+shift $min_args
+
+# Which file extension is on the source file, if any?
+declare source_has_extension
+for ext in ${extensions[@]}; do
+    if [[ "$source" == *".$ext" ]]; then
+        source_has_extension=$ext
+        break
+    fi
+done
+
+declare file
+declare program
+if [[ -n ${source_has_extension+set} ]]; then
+    # Extension found.
+    file="$source"
+    program="${source%\.$source_has_extension}"
+else
+    # Extension not found. Look for source file.
+    for ext in ${extensions[@]}; do
+        if [[ -f "$source.$ext" ]]; then
+            file="$source.$ext"
+            program="$source"
+            source_has_extension=$ext
+            break
+        fi
+    done
+    if [[ -z ${source_has_extension+set} ]]; then
+        # Failed to find a valid extension. Treat literally.
+        file="$source"
+        program="a.out"
+    fi
+fi
+
+# Split remaining arguments
+declare compiler_options=""
+declare program_arguments=""
+declare -n ref=compiler_options
+for arg in $@; do
+    if [[ "$arg" == '--' ]]; then
+        declare -n ref=program_arguments
+        continue
+    fi
+    ref="${ref:+${ref} }$arg"
+done
+
+# Get compiler version information
+$compiler --version | head -n1
+
+(set -o xtrace; $compiler $compiler_options -o $program $file) || exit $?
+
+(set -o xtrace; ./$program $program_arguments)
