@@ -82,13 +82,13 @@ fi
 # Split remaining arguments
 declare compiler_options=""
 declare program_arguments=""
-declare -n ref=compiler_options
+declare ref=compiler_options
 for arg in $@; do
     if [[ "$arg" == '--' ]]; then
-        declare -n ref=program_arguments
+        declare ref=program_arguments
         continue
     fi
-    ref="${ref:+${ref} }$arg"
+    printf -v "$ref" '%s' "${!ref:+${!ref} }$arg"
 done
 
 # Get compiler version information
